@@ -97,7 +97,7 @@ def get_service_requests(
     if asset_num:
         where_clauses.append(_format_in_clause("assetnum", asset_num))
     if status:
-        where_clauses.append(f'status="{status}"')
+        where_clauses.append(_format_in_clause("status", status))
     if reported_by:
         where_clauses.append(f'reportedby="{reported_by}"')
     if owner:
@@ -106,12 +106,15 @@ def get_service_requests(
         where_clauses.append(f'description="%{query}%"')
         
     params = {
-        "oslc.pageSize": str(limit * 2),  # Fetch extra to account for deduplication
         "oslc.select": "ticketid,description,description_longdescription,location,assetnum,status,reportedby,affectedperson,owner,ownergroup,reportedpriority,internalpriority,reportdate,targetstart,targetfinish,siteid,orgid"
     }
 
     if count_only:
         params["count"] = "1"
+    else:
+        # Fetch extra to account for deduplication; pageSize is meaningless (and Maximo
+        # rejects pageSize=0) when count_only skips fetching rows entirely.
+        params["oslc.pageSize"] = str(max(limit, 1) * 2)
 
     if saved_query:
         params["savedQuery"] = saved_query
@@ -196,12 +199,15 @@ def get_locations(
         where_clauses.append(f'parent="{parent_id}"')
 
     params = {
-        "oslc.pageSize": str(limit * 2),  # Fetch extra to account for deduplication across hierarchies
         "oslc.select": "location,description,siteid,orgid,status,type,parent,hierarchypath,showinworkcenter"
     }
 
     if count_only:
         params["count"] = "1"
+    else:
+        # Fetch extra to account for deduplication across hierarchies; pageSize is meaningless
+        # (and Maximo rejects pageSize=0) when count_only skips fetching rows entirely.
+        params["oslc.pageSize"] = str(max(limit, 1) * 2)
 
     if saved_query:
         params["savedQuery"] = saved_query
@@ -278,12 +284,15 @@ def get_classifications(
         where_clauses.append(f'show={"true" if show_in_sr else "false"}')
 
     params = {
-        "oslc.pageSize": str(limit * 2),
         "oslc.select": "classstructureid,classificationid,description,parent,hierarchypath,show,type,siteid,orgid"
     }
-    
+
     if count_only:
         params["count"] = "1"
+    else:
+        # pageSize is meaningless (and Maximo rejects pageSize=0) when count_only skips
+        # fetching rows entirely.
+        params["oslc.pageSize"] = str(max(limit, 1) * 2)
 
     if saved_query:
         params["savedQuery"] = saved_query

@@ -1,6 +1,6 @@
 # IBM Maximo AI Chatbot
 
-An enterprise-grade AI Chatbot and Copilot system connecting **IBM Maximo Asset Management (OSLC REST API)** with **Google Gemini 3.5 AI** via **Model Context Protocol (MCP)** and a modern **React UI** built on `@assistant-ui/react`.
+An enterprise-grade AI Chatbot and Copilot system connecting **IBM Maximo Asset Management (OSLC REST API)** with **Ollama** (`gpt-oss:120b-cloud` by default) via a hand-rolled tool-calling loop, with tools defined using the **Model Context Protocol (MCP)** SDK, and a modern **React UI** built on `@assistant-ui/react`.
 
 Deployed natively as a serverless architecture on **AWS Lambda** and **AWS API Gateway**.
 
@@ -10,7 +10,7 @@ Deployed natively as a serverless architecture on **AWS Lambda** and **AWS API G
 
 * **Natural Language Maximo Queries**: Query Service Requests, Locations, Assets, and Classifications in plain English.
 * **Instant Total Record Counting (`?count=1`)**: Uses native Maximo OSLC `?count=1` parameters to fetch total counts instantly with zero payload overhead.
-* **Model Context Protocol (MCP)**: Implements `mcp.server` (`maximo_mcp_server.py`) exposing Maximo REST tools for LLM Automatic Function Calling (AFC).
+* **Hand-Rolled Ollama Tool Calling**: `ollama_client.py` drives an explicit call→execute→respond loop against Ollama's native `/api/chat` — no automatic function calling, arguments are validated with Pydantic (`tool_schemas.py`) before hitting Maximo. Tools are defined via `mcp.server` (`maximo_mcp_server.py`), whose docstrings source the tool descriptions.
 * **Serverless AWS Backend**: FastAPI application wrapped with `Mangum` ASGI adapter running on **AWS Lambda** (Python 3.11) behind **AWS API Gateway (HTTP API)**.
 * **Vercel Zinc Design System**: Modern monochrome dark UI (`#000000` background, `border-zinc-800`, `#fafafa` typography) built with `@assistant-ui/react` (v0.15.x) Radix primitives.
 * **GitHub-Flavored Markdown (GFM) Tables**: Renders cleanly formatted tables for tickets, locations, and classifications using `remark-gfm`.
@@ -39,7 +39,7 @@ Deployed natively as a serverless architecture on **AWS Lambda** and **AWS API G
                           ▼
 ┌─────────────────────────────────────────────────────────┐
 │            AWS Lambda Function (Python 3.11)            │
-│         FastAPI + Mangum ASGI + Gemini 3.5 Flash        │
+│      FastAPI + Mangum ASGI + Ollama tool-calling loop    │
 └─────────────────────────┬───────────────────────────────┘
                           │
                OSLC HTTP REST API (apikey)
@@ -57,9 +57,11 @@ Deployed natively as a serverless architecture on **AWS Lambda** and **AWS API G
 
 ```text
 api-training/
-├── main.py                     # FastAPI backend orchestration & Gemini function calling
+├── main.py                     # FastAPI backend orchestration
+├── ollama_client.py            # Ollama HTTP calls & hand-rolled tool-calling loop
+├── tool_schemas.py             # Pydantic arg models & Ollama tool schema construction
 ├── maximo_client.py            # IBM Maximo OSLC REST API integration & ?count=1 handler
-├── maximo_mcp_server.py        # Model Context Protocol (MCP) server definition
+├── maximo_mcp_server.py        # Model Context Protocol (MCP) tool definitions
 ├── requirements.txt            # Python dependencies manifest
 ├── .env.example                # Template environment variables
 ├── frontend/                   # React SPA Frontend
@@ -79,6 +81,7 @@ api-training/
 * Python 3.11+
 * Node.js 18+ & npm
 * IBM Maximo API Key & Endpoint
+* [Ollama](https://ollama.com) running locally (`ollama serve`). For the default `gpt-oss:120b-cloud` model, also run `ollama signin` — it executes on Ollama Cloud via the local daemon's proxy, so no `ollama pull`/local GPU is needed. Swap `OLLAMA_MODEL` to a fully local model (e.g. `llama3.1`, after `ollama pull llama3.1`) any time.
 
 ### 2. Environment Setup
 Create a `.env` file in the root directory:
@@ -89,10 +92,12 @@ cp .env.example .env
 
 Fill in your API credentials:
 ```env
-GEMINI_API_KEY=your_gemini_api_key
 MAXIMO_BASE_URL=https://your-maximo-host/maximo
 MAXIMO_API_KEY=your_maximo_api_key
-GEMINI_MODEL=gemini-3.5-flash-lite
+
+# Ollama Configuration
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=gpt-oss:120b-cloud
 ```
 
 ### 3. Backend Setup
@@ -116,6 +121,8 @@ Open `http://localhost:5173` in your browser.
 
 ## ☁️ AWS Serverless Deployment
 
+> **Ollama reachability:** `OLLAMA_HOST` defaults to `http://localhost:11434`, which does not exist inside a Lambda execution environment. Deploying this as-is requires an `OLLAMA_HOST` that Lambda can actually reach over the network (e.g. Ollama running on an EC2/ECS instance in the same VPC) — a local-only Ollama setup only works for `uvicorn` running on your own machine.
+
 ### 1. Build Linux Deployment Package
 ```bash
 mkdir -p build_pkg
@@ -128,7 +135,7 @@ pip install \
   -r requirements.txt
 
 cd build_pkg && zip -q -r ../lambda_deploy.zip . && cd ..
-zip -q -g lambda_deploy.zip main.py maximo_client.py maximo_mcp_server.py .env
+zip -q -g lambda_deploy.zip main.py ollama_client.py tool_schemas.py maximo_client.py maximo_mcp_server.py .env
 ```
 
 ### 2. Deploy to AWS Lambda & API Gateway

@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import {
   AssistantRuntimeProvider,
   useLocalRuntime,
+  useAui,
   type ChatModelAdapter,
   ThreadPrimitive,
   MessagePrimitive,
@@ -11,19 +13,31 @@ import "@assistant-ui/react-markdown/styles/dot.css";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://1esbcsi8mf.execute-api.eu-central-1.amazonaws.com/api/chat";
+
+const MODEL_LABEL = "gpt-oss:120b-cloud";
+
+const STARTER_QUERIES = [
+  "How many open service requests are there?",
+  "Show locations at site BEDFORD",
+  "Classifications available for service requests",
+  "Tickets for location AIR101 or 764750",
+];
+
 const maximoAdapter: ChatModelAdapter = {
   async run({ messages, abortSignal }) {
     const lastUserMessage = messages[messages.length - 1];
     let userText = "";
     if (lastUserMessage && lastUserMessage.content) {
       userText = lastUserMessage.content
-        .filter((c) => c.type === "text")
-        .map((c: any) => c.text)
+        .filter((c): c is { type: "text"; text: string } => c.type === "text")
+        .map((c) => c.text)
         .join("\n");
     }
 
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "https://1esbcsi8mf.execute-api.eu-central-1.amazonaws.com/api/chat";
-    const response = await fetch(apiBaseUrl, {
+    const response = await fetch(API_BASE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: userText }),
@@ -41,39 +55,124 @@ const maximoAdapter: ChatModelAdapter = {
   },
 };
 
+function GaugeMark({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" strokeWidth="2.4" />
+      <path d="M16 16 L16 8.5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M16 16 L21 19.2" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      <circle cx="16" cy="16" r="1.8" fill="currentColor" />
+    </svg>
+  );
+}
+
+type Theme = "light" | "dark";
+
+function useThemeToggle() {
+  const [theme, setTheme] = useState<Theme | null>(() => {
+    const stored = window.localStorage.getItem("maximo-copilot-theme");
+    return stored === "light" || stored === "dark" ? stored : null;
+  });
+
+  useEffect(() => {
+    if (theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      window.localStorage.setItem("maximo-copilot-theme", theme);
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  }, [theme]);
+
+  const systemPrefersDark =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+
+  const resolved = theme ?? (systemPrefersDark ? "dark" : "light");
+
+  return {
+    resolved,
+    toggle: () => setTheme(resolved === "dark" ? "light" : "dark"),
+  };
+}
+
+function ConsoleHeader() {
+  const { resolved, toggle } = useThemeToggle();
+  return (
+    <header className="console-header">
+      <div className="console-brand">
+        <span className="brand-mark">
+          <GaugeMark />
+        </span>
+        <div className="brand-text">
+          <span className="brand-name">Maximo Copilot</span>
+          <span className="brand-subtitle">Asset &amp; service request assistant</span>
+        </div>
+      </div>
+      <div className="console-telemetry">
+        <span className="model-tag">{MODEL_LABEL}</span>
+        <span className="status-pill">
+          <span className="status-dot" />
+          Connected
+        </span>
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={toggle}
+          aria-label={resolved === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        >
+          {resolved === "dark" ? "Light" : "Dark"}
+        </button>
+      </div>
+    </header>
+  );
+}
+
+function EmptyState() {
+  const aui = useAui();
+
+  const runSuggestion = (text: string) => {
+    const composer = aui.thread.composer();
+    composer.setText(text);
+    composer.send();
+  };
+
+  return (
+    <div className="console-empty">
+      <span className="empty-mark">
+        <GaugeMark size={26} />
+      </span>
+      <h2 className="empty-title">Ask about your Maximo environment</h2>
+      <p className="empty-desc">
+        Query service requests, locations, and classifications in plain language. Counts, filters,
+        and lookups run live against your Maximo OSLC API.
+      </p>
+      <div className="starter-grid">
+        {STARTER_QUERIES.map((q) => (
+          <button key={q} type="button" className="starter-chip" onClick={() => runSuggestion(q)}>
+            {q}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ChatUI() {
   return (
-    <ThreadPrimitive.Root className="chat-container">
-      {/* Top Header Bar */}
-      <header className="chat-header">
-        <div className="chat-header-title">
-          <span>Maximo AI Assistant</span>
-          <span className="model-pill">Gemini 3.5 Flash Lite</span>
-        </div>
-        <div className="status-badge">
-          <span className="status-dot"></span>
-          <span>AWS Lambda API Gateway Connected</span>
-        </div>
-      </header>
+    <ThreadPrimitive.Root className="app-shell">
+      <ConsoleHeader />
 
-      {/* Main Messages Viewport */}
-      <ThreadPrimitive.Viewport className="chat-viewport">
+      <ThreadPrimitive.Viewport className="console-viewport">
         <ThreadPrimitive.Empty>
-          <div className="empty-state">
-            <div className="empty-state-icon">🛠️</div>
-            <div className="empty-state-title">Maximo Asset & Ticket Copilot</div>
-            <div className="empty-state-desc">
-              Ask questions about service requests, locations, work orders, or classifications across your IBM Maximo environment.
-            </div>
-          </div>
+          <EmptyState />
         </ThreadPrimitive.Empty>
 
-        {/* Message Item Rendering */}
         <ThreadPrimitive.Messages>
           {({ message }) => (
             <MessagePrimitive.Root
-              className={message.role === "user" ? "user-message-root" : "assistant-message-root"}
+              className={message.role === "user" ? "record record-user" : "record record-assistant"}
             >
+              {message.role !== "user" && <div className="record-label">Response</div>}
               <MessagePrimitive.Parts>
                 {({ part }) => {
                   switch (part.type) {
@@ -88,24 +187,27 @@ function ChatUI() {
           )}
         </ThreadPrimitive.Messages>
 
-        {/* Loading Indicator */}
         <AuiIf condition={({ thread }) => thread.isRunning}>
           <div className="loading-indicator">
-            <div className="spinner"></div>
-            <span>Querying Maximo OSLC REST API...</span>
+            <span className="loading-bars" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+            Querying Maximo OSLC API
           </div>
         </AuiIf>
       </ThreadPrimitive.Viewport>
 
-      {/* Input Composer */}
-      <ComposerPrimitive.Root className="chat-composer">
+      <ComposerPrimitive.Root className="console-composer">
+        <span className="composer-prompt" aria-hidden="true">
+          &gt;
+        </span>
         <ComposerPrimitive.Input
           className="composer-input"
-          placeholder="Ask Maximo AI (e.g. 'Show tickets for location AIR101 and 764750')..."
+          placeholder="Ask about tickets, locations, or classifications…"
         />
-        <ComposerPrimitive.Send className="composer-send">
-          Send
-        </ComposerPrimitive.Send>
+        <ComposerPrimitive.Send className="composer-send">Send</ComposerPrimitive.Send>
       </ComposerPrimitive.Root>
     </ThreadPrimitive.Root>
   );
