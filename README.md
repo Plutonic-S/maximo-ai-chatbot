@@ -11,8 +11,9 @@ Deployed natively as a serverless architecture on **AWS Lambda** and **AWS API G
 * **Natural Language Maximo Queries**: Query Service Requests, Locations, Assets, and Classifications in plain English.
 * **Instant Total Record Counting (`?count=1`)**: Uses native Maximo OSLC `?count=1` parameters to fetch total counts instantly with zero payload overhead.
 * **Hand-Rolled Ollama Tool Calling**: `ollama_client.py` drives an explicit call→execute→respond loop against Ollama's native `/api/chat` — no automatic function calling, arguments are validated with Pydantic (`tool_schemas.py`) before hitting Maximo. Tools are defined via `mcp.server` (`maximo_mcp_server.py`), whose docstrings source the tool descriptions.
+* **BI Chart Visualization (`render_chart`)**: Synthetic tool dispatch that emits Pydantic-validated chart specifications (`ChartSpec`). Supports dynamic client-side **Bar**, **Line**, **Pie**, and **Area** chart rendering via Recharts.
 * **Serverless AWS Backend**: FastAPI application wrapped with `Mangum` ASGI adapter running on **AWS Lambda** (Python 3.11) behind **AWS API Gateway (HTTP API)**.
-* **Vercel Zinc Design System**: Modern monochrome dark UI (`#000000` background, `border-zinc-800`, `#fafafa` typography) built with `@assistant-ui/react` (v0.15.x) Radix primitives.
+* **Vercel Zinc Design System**: Modern monochrome dark UI (`#000000` background, `border-zinc-800`, `#fafafa` typography) built with `@assistant-ui/react` (v0.15.x) Radix primitives and Recharts chart container (`ChartRenderer.tsx`).
 * **GitHub-Flavored Markdown (GFM) Tables**: Renders cleanly formatted tables for tickets, locations, and classifications using `remark-gfm`.
 
 ---
@@ -22,7 +23,7 @@ Deployed natively as a serverless architecture on **AWS Lambda** and **AWS API G
 ```text
 ┌─────────────────────────────────────────────────────────┐
 │             React SPA Frontend (Vite)                   │
-│      @assistant-ui/react (v0.15.x) + remark-gfm         │
+│      @assistant-ui/react + Recharts (ChartRenderer)     │
 │          Vercel Zinc Monochrome Dark Aesthetic          │
 └─────────────────────────┬───────────────────────────────┘
                           │
@@ -39,7 +40,7 @@ Deployed natively as a serverless architecture on **AWS Lambda** and **AWS API G
                           ▼
 ┌─────────────────────────────────────────────────────────┐
 │            AWS Lambda Function (Python 3.11)            │
-│      FastAPI + Mangum ASGI + Ollama tool-calling loop    │
+│  FastAPI + Mangum + Ollama loop + render_chart dispatch │
 └─────────────────────────┬───────────────────────────────┘
                           │
                OSLC HTTP REST API (apikey)
@@ -67,6 +68,7 @@ api-training/
 ├── frontend/                   # React SPA Frontend
 │   ├── src/
 │   │   ├── App.tsx             # assistant-ui chat component & local runtime connector
+│   │   ├── ChartRenderer.tsx   # Dynamic Recharts component (Bar, Line, Pie, Area)
 │   │   ├── index.css           # Vercel Zinc Monochrome design system tokens
 │   │   └── main.tsx            # React entry point
 │   ├── package.json            # Frontend dependencies
@@ -79,7 +81,7 @@ api-training/
 
 ### 1. Prerequisites
 * Python 3.11+
-* Node.js 18+ & npm
+* Node.js 18+ & npm (or Toolbx environment)
 * IBM Maximo API Key & Endpoint
 * [Ollama](https://ollama.com) running locally (`ollama serve`). For the default `gpt-oss:120b-cloud` model, also run `ollama signin` — it executes on Ollama Cloud via the local daemon's proxy, so no `ollama pull`/local GPU is needed. Swap `OLLAMA_MODEL` to a fully local model (e.g. `llama3.1`, after `ollama pull llama3.1`) any time.
 
@@ -102,10 +104,12 @@ OLLAMA_MODEL=gpt-oss:120b-cloud
 
 ### 3. Backend Setup
 ```bash
-python -m venv venv
+# Standard Python
 source venv/bin/activate
-pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
+
+# Or inside Fedora Toolbx dev container:
+toolbox run -c dev ./venv/bin/uvicorn main:app --reload --port 8000
 ```
 Backend health check: `http://localhost:8000/`
 
@@ -114,6 +118,9 @@ Backend health check: `http://localhost:8000/`
 cd frontend
 npm install
 npm run dev
+
+# Or inside Fedora Toolbx dev container:
+toolbox run -c dev npm --prefix frontend run dev
 ```
 Open `http://localhost:5173` in your browser.
 
