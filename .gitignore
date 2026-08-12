@@ -45,6 +45,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Claude Code local working-state (personal, not shared — see CLAUDE.md's @import)
+.claude/TASKS.local.md
+
 # IDE & OS Files
 .DS_Store
 .idea/

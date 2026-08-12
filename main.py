@@ -35,6 +35,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+    chart: Optional[Dict[str, Any]] = None
     status: str = "success"
 
 
@@ -53,10 +54,11 @@ def chat_endpoint(request: ChatRequest):
         raise HTTPException(status_code=400, detail="Message content cannot be empty.")
 
     try:
-        reply_text = chat_with_tools(request.message)
-        return ChatResponse(reply=reply_text, status="success")
+        reply_text, chart = chat_with_tools(request.message)
+        return ChatResponse(reply=reply_text, chart=chart, status="success")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+
 
 
 # ASGI Handler for AWS Lambda deployment via Mangum

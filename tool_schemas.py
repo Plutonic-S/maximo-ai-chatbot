@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, Field
 from maximo_mcp_server import (
     fetch_service_requests,
@@ -19,7 +19,7 @@ class ServiceRequestArgs(BaseModel):
     asset_num: Optional[str] = Field(default=None, description="Asset identifier code.")
     status: Optional[str] = Field(
         default=None,
-        description="Ticket status ('NEW', 'QUEUED', 'PENDING', 'INPROG', 'RESOLVED', 'CLOSED').",
+        description="Ticket status ('NEW', 'QUEUED', 'PENDING', 'INPROG', 'RESOLVED', 'CLOSED', 'CANCELLED').",
     )
     reported_by: Optional[str] = Field(
         default=None, description="Person ID who reported the issue."
@@ -102,6 +102,27 @@ class ClassificationArgs(BaseModel):
     limit: int = Field(default=10, description="Maximum number of records to return.")
 
 
+class ChartDataPoint(BaseModel):
+    label: str = Field(description="Category/x-axis label for this data point.")
+    value: float = Field(description="Numeric value for this data point.")
+
+
+class ChartSpec(BaseModel):
+    chart_type: Literal["bar", "line", "pie", "area"] = Field(
+        description="Chart type. Use 'bar' for comparing categories, 'line'/'area' for trends "
+        "over time or ordered sequences, 'pie' for parts-of-a-whole with few (<=6) categories."
+    )
+    title: str = Field(description="Short chart title.")
+    category_label: str = Field(
+        description="Label for the category/x-axis, e.g. 'Status'."
+    )
+    value_label: str = Field(description="Label for the value/y-axis, e.g. 'Count'.")
+    data: list[ChartDataPoint] = Field(
+        description="Data points to plot. Values must be copied exactly from a prior tool "
+        "result already in this conversation — never invented or estimated."
+    )
+
+
 TOOL_FUNCTIONS = {
     "fetch_service_requests": fetch_service_requests,
     "fetch_locations": fetch_locations,
@@ -111,6 +132,7 @@ TOOL_ARG_MODELS = {
     "fetch_service_requests": ServiceRequestArgs,
     "fetch_locations": LocationArgs,
     "fetch_classifications": ClassificationArgs,
+    "render_chart": ChartSpec,
 }
 
 TOOL_SCHEMAS = []
@@ -128,3 +150,18 @@ for name, func in TOOL_FUNCTIONS.items():
             },
         }
     )
+
+TOOL_SCHEMAS.append(
+    {
+        "type": "function",
+        "function": {
+            "name": "render_chart",
+            "description": (
+                "Render a chart for the user from data already fetched in this conversation. "
+                "Call a fetch_* tool first to get real numbers, then call this with those exact values."
+            ),
+            "parameters": ChartSpec.model_json_schema(),
+        },
+    }
+)
+

@@ -2,20 +2,28 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+@.claude/TASKS.local.md
+
 ## Project overview
 
 An AI chatbot/copilot that connects **IBM Maximo Asset Management** (OSLC REST API) to **Ollama** (currently `gpt-oss:120b-cloud`, run via a local `ollama serve` proxying to Ollama Cloud) via a hand-rolled tool-calling loop, exposed through a FastAPI backend and a React (`@assistant-ui/react`) frontend. The backend is designed to run as an AWS Lambda function (via Mangum) behind API Gateway, and also runs locally with uvicorn.
 
 ## Commands
 
+### Toolbx Environment (`dev` container)
+
+This system uses Fedora Toolbx. All dev commands (python, uvicorn, node, npm, etc.) must be run inside the `dev` toolbox container:
+```bash
+toolbox run -c dev <command>
+```
+
 ### Backend (Python, run from repo root)
 
 ```bash
-source venv/bin/activate            # venv already exists; python3.14
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000   # local dev server, health check at http://localhost:8000/
-python test_backend.py              # manual smoke test script (see Testing below)
+toolbox run -c dev source venv/bin/activate
+toolbox run -c dev uvicorn main:app --reload --port 8000
 ```
+
 
 There is no lint/format tooling configured for the Python code (no ruff/black/flake8 config present).
 

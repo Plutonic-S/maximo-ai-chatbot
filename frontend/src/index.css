@@ -401,6 +401,44 @@ button {
   background-color: var(--accent-wash);
 }
 
+/* ---------- Charts ---------- */
+
+.chart-container {
+  margin: 14px 0;
+  padding: 14px 16px 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.chart-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.chart-axis-caption {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+  padding-bottom: 8px;
+}
+
+.chart-error {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin: 14px 0;
+}
+
 /* ---------- Composer ---------- */
 
 .console-composer {

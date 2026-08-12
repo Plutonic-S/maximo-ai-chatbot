@@ -1,8 +1,9 @@
 import os
 import json
+from typing import Optional, Tuple, Dict, Any
 from dotenv import load_dotenv
 import requests
-from tool_schemas import TOOL_FUNCTIONS, TOOL_ARG_MODELS, TOOL_SCHEMAS
+from tool_schemas import TOOL_FUNCTIONS, TOOL_ARG_MODELS, TOOL_SCHEMAS, ChartSpec
 
 # load from env
 load_dotenv()
@@ -11,7 +12,7 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gpt-oss:120b-cloud")
 
 
-def chat_with_tools(user_message: str, max_rounds: int = 8) -> str:
+def chat_with_tools(user_message: str, max_rounds: int = 8) -> Tuple[str, Optional[Dict[str, Any]]]:
     system_instruction = (
         "You are the IBM Maximo AI Assistant, a copilot for querying Maximo Asset Management data. "
         "You have tools to look up service requests/tickets, locations, and classifications — call the relevant tool "
@@ -24,6 +25,9 @@ def chat_with_tools(user_message: str, max_rounds: int = 8) -> str:
         "several different locations), make all of those calls together in the same turn — you can call the same tool "
         "multiple times in one turn — rather than spreading them one at a time across multiple turns; you only get a "
         "limited number of turns. "
+        "When the user asks for a chart, graph, or visualization, call the relevant fetch_* tool first if you haven't "
+        "already to fetch real data, then call render_chart with those exact numbers. Never invent or estimate numbers for a chart. "
+        "Keep your accompanying text reply to one short sentence since the chart is the actual answer.\n\n"
         "If a tool call fails (its result has \"success\": false), tell the user what went wrong in plain language "
         "instead of pretending it worked. For general conversation unrelated to Maximo data, just answer directly "
         "without calling a tool.\n\n"
@@ -38,6 +42,8 @@ def chat_with_tools(user_message: str, max_rounds: int = 8) -> str:
         {"role": "system", "content": system_instruction},
         {"role": "user", "content": user_message},
     ]
+
+    chart_payload = None
 
     for round_num in range(max_rounds):
         payload = {
@@ -55,12 +61,26 @@ def chat_with_tools(user_message: str, max_rounds: int = 8) -> str:
         messages.append(response_message)
 
         if not response_message.get("tool_calls"):
-            return response_message.get("content") or ""
+            return response_message.get("content") or "", chart_payload
 
         for tool_call in response_message.get("tool_calls", []):
             func_info = tool_call["function"]
             name = func_info["name"]
             raw_args = func_info.get("arguments", {})
+
+            if name == "render_chart":
+                try:
+                    chart_payload = ChartSpec(**raw_args).model_dump()
+                    result = {
+                        "success": True,
+                        "message": "Chart rendered for the user. Give a brief one-line summary, "
+                        "don't repeat the data as a table.",
+                    }
+                except Exception as e:
+                    chart_payload = None
+                    result = {"success": False, "error": f"Invalid chart spec: {str(e)}"}
+                messages.append({"role": "tool", "tool_name": name, "content": json.dumps(result)})
+                continue
 
             arg_model = TOOL_ARG_MODELS.get(name)
             func = TOOL_FUNCTIONS.get(name)
@@ -82,4 +102,5 @@ def chat_with_tools(user_message: str, max_rounds: int = 8) -> str:
                 }
             )
 
-    return "Maximum tool execution rounds reached without a final response."
+    return "Maximum tool execution rounds reached without a final response.", chart_payload
+

@@ -12,6 +12,7 @@ import {
 import "@assistant-ui/react-markdown/styles/dot.css";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
+import { ChartRenderer } from "./ChartRenderer";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
@@ -49,9 +50,30 @@ const maximoAdapter: ChatModelAdapter = {
     }
 
     const data = await response.json();
-    return {
-      content: [{ type: "text", text: data.reply }],
-    };
+    const content: Array<
+      | { type: "text"; text: string }
+      | {
+          type: "tool-call";
+          toolCallId: string;
+          toolName: string;
+          args: Record<string, never>;
+          argsText: string;
+          result?: unknown;
+        }
+    > = [{ type: "text", text: data.reply }];
+
+    if (data.chart) {
+      content.push({
+        type: "tool-call",
+        toolCallId: crypto.randomUUID(),
+        toolName: "render_chart",
+        args: {},
+        argsText: "{}",
+        result: data.chart,
+      });
+    }
+
+    return { content };
   },
 };
 
@@ -178,6 +200,10 @@ function ChatUI() {
                   switch (part.type) {
                     case "text":
                       return <MarkdownTextPrimitive remarkPlugins={[remarkGfm]} />;
+                    case "tool-call":
+                      return part.toolName === "render_chart" ? (
+                        <ChartRenderer spec={part.result} />
+                      ) : null;
                     default:
                       return null;
                   }
