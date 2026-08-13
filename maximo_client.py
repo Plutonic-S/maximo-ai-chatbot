@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
-MAXIMO_BASE_URL = os.getenv("MAXIMO_BASE_URL", "https://REDACTED-HOST.example.net/maximo")
+MAXIMO_BASE_URL = os.getenv("MAXIMO_BASE_URL")
 MAXIMO_API_KEY = os.getenv("MAXIMO_API_KEY")
 
 def _get_headers() -> Dict[str, str]:
